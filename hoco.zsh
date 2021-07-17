@@ -1,4 +1,114 @@
 #!/usr/bin/zsh
+# shellcheck shell=bash
+# The extension for standard zsh _hosts autocompletion
+# Copyright 2021 Mikhail f. Shiryaev
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+###############
+# DESCRIPTION #
+###############
+#
+# This script does the next things:
+# - Use async module to not block the flow
+# - Preserve the original _hosts function as _hosts_orig
+# - Adds configurable cache expiring for _cache_hosts
+# - Executes each function in HOCO_FUNCTIONS and adds new line separated values to _cache_hosts
+#
+#################
+# CONFIGURATION #
+#################
+#
+# HOCO means hosts completion
+#
+# HOCO_CACHE_TTL: cache expiration timeout in seconds, default 600
+# HOCO_FUNCTIONS: array of functions or commands to get hosts.
+#   Only single words are accepted, no arguments are allowed.
+#   The output should be "one host per line"
+#
+
+
+# Preserve _hosts as _hosts_orig, but only once
+if ! (( $_HOCO_INIT_DONE )); then
+  typeset -g _HOCO_INIT_DONE=1
+
+  # _hosts needs to be intiated before tweaking
+  _hosts 2>/dev/null >&1 || true
+
+  eval "$(type -f _hosts | sed -r '1 s/_hosts/_hosts_orig/')"
+fi
+
+__hosts_cache_callback() {
+  ((_HOCO_RUNNING_JOBS--))
+
+  # It's 99.9% impossible to have empty original _cache_hosts,
+  # but it's checked before filling originally. We should wait untill it's set
+  while (( $+_cache_hosts == 0 )); do
+    sleep 0.1
+  done
+
+  # $2: exit status; $3: stdout
+  [[ "$2" == 0 ]] && _cache_hosts+=("${(f)3}")
+
+  # cleaunup for the last job
+  if (( _HOCO_RUNNING_JOBS == 0 )); then
+    async_unregister_callback hosts_cache_updater
+    async_stop_worker hosts_cache_updater
+  fi
+}
+
+# Arguments:
+# $1 - cache_age
+__hosts_cache_update() {
+  # if cache age is twice older than ${HOCO_CACHE_TTL:-600}, then it's definitely an issue
+  # with long runnung tasks, abort them
+  if (( ${HOCO_CACHE_TTL:-600} < ${1} / 2 )); then
+    unset _HOCO_UPDATE_RUNNING_SINCE
+    async_flush_jobs hosts_cache_updater
+    async_unregister_callback hosts_cache_updater
+    async_stop_worker hosts_cache_updater
+  fi
+  (( ${_HOCO_UPDATE_RUNNING_SINCE} )) && return 0
+  _HOCO_CACHE_UPDATED=${EPOCHSECONDS}
+  unset _cache_hosts
+
+  # starting worker that runs only one unic function with notifications
+  async_start_worker hosts_cache_updater -n -u
+  async_register_callback hosts_cache_updater __hosts_cache_callback
+
+  _HOCO_RUNNING_JOBS=${#HOCO_FUNCTIONS}
+  for func (${HOCO_FUNCTIONS}); do
+    async_job hosts_cache_updater ${func}
+  done
+}
+
+_hosts() {
+  # Should be cache updated or not
+  local cache_age
+  cache_age=$((EPOCHSECONDS - _HOCO_CACHE_UPDATED))
+  if (( ${HOCO_CACHE_TTL:-600} < ${cache_age} )); then
+    __hosts_cache_update ${cache_age}
+  fi
+
+  # original logic
+  _hosts_orig
+}
+
+
+
+
+if ! (( ASYNC_INIT_DONE )); then
+# The async is vendored only if not loaded
 #
 # The code for an async work is nicely borrowed from https://github.com/mafredri/zsh-async
 # Licensed under MIT
@@ -676,5 +786,6 @@ async_init
 #############
 # END ASYNC #
 #############
+fi
 
 # vim: filetype=zsh
