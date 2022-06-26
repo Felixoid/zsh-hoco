@@ -11,5 +11,20 @@ On the other hand, `_hosts` caches all hosts for autocompletion only once, and t
 ## Solution
 The [hoco.zsh](./hoco.zsh) solves both `_hosts` flaws:
 
-- It updates the cache once per `$HOCO_CACHE_TTL` period (600 by default)
-- It allows to update list of hosts dynamically. Each binary or function in `$HOCO_FUNCTIONS` array is executed asynchronously via [zsh-async](https://github.com/mafredri/zsh-async). The list of hosts for completion is updated on readiness.
+- It updates the cache once per `$HOCO_CACHE_AGE` period, the default is 10 minutes
+- It allows to update list of hosts dynamically. Each binary or function in `$HOCO_FUNCTIONS` array is executed asynchronously. The list of hosts for completion is updated on readiness.
+
+### Usage
+
+The only thing you need to do is:
+
+```
+source hoco.zsh
+some-function() {
+  echo host1 host2 # it does not matter if hosts are separated by spaces
+  echo host3	host4 # or by new lines (LF), or by tabs
+}
+HOCO_FUNCTIONS=(some-function)
+
+ssh <tab>
+```
