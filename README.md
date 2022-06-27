@@ -4,7 +4,7 @@
 Small function to improve and extend original zsh `_hosts` completion function.
 
 ## Objectives
-The original zsh hosts completion is not extendable. And when you replace it with `zstyle -e ':completion:*:hosts' hosts 'reply=(...)`, all original completions should be represented too.
+The original zsh hosts completion is not extendable. And when you replace it with `zstyle -e ':completion:*:hosts' hosts 'reply=(...)'`, all original completions should be represented too.
 
 On the other hand, `_hosts` caches all hosts for autocompletion only once, and then uses it. And it's not so obvious how to reset it.
 
